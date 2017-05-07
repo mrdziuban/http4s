@@ -69,6 +69,8 @@ object GZip {
   private def deflateStep(crc: CRC32, inputLength: Int, level: Int, bufferSize: Int): ((Chunk[Byte], Handle[Pure, Byte])) => Pull[Pure, Byte, Handle[Pure, Byte]] = {
     case (c, h) =>
       val chunkArr = c.toArray
+      println(s"CHUNK ARR: ${chunkArr.mkString(", ")}")
+      println(s"INPUT LENGTH 2: ${inputLength + chunkArr.length}")
       crc.update(chunkArr)
       Pull.outputs(deflate(
         level = level,
@@ -77,11 +79,22 @@ object GZip {
       )(chunk(c))) >> deflateHandle(crc, inputLength + chunkArr.length, level, bufferSize)(h)
   }
 
-  private def deflateHandle(crc: CRC32, inputLength: Int, level: Int, bufferSize: Int)(h: Handle[Pure, Byte]): Pull[Pure, Byte, Handle[Pure, Byte]] =
+  private def deflateHandle(crc: CRC32, inputLength: Int, level: Int, bufferSize: Int)(h: Handle[Pure, Byte]): Pull[Pure, Byte, Handle[Pure, Byte]] = {
+    println(s"IN DEFLATE HANDLE: $inputLength")
     h.await flatMap deflateStep(crc, inputLength, level, bufferSize) or deflateFinish(crc, inputLength)
+  }
 
-  private def deflateFinish(crc: CRC32, inputLength: Int): Pull[Pure, Byte, Nothing] =
+    // h.await flatMap deflateStep(crc, inputLength, level, bufferSize) or deflateFinish(crc, inputLength)
+
+  private def deflateFinish(crc: CRC32, inputLength: Int): Pull[Pure, Byte, Nothing] = {
+    println("HERE")
+    println(s"CRC VALUE: ${crc.getValue}")
+    println(s"INPUT LENGTH: $inputLength")
+    println("DONE")
+    val extraBytes = Some(inputLength).filter(_ == 0).map(_ => Array(3.toByte, 0.toByte)).getOrElse(Array[Byte]())
     Pull.output(Chunk.bytes(
-      DatatypeConverter.parseHexBinary("%08x".format(crc.getValue())).reverse ++
+      extraBytes ++
+        DatatypeConverter.parseHexBinary("%08x".format(crc.getValue())).reverse ++
         DatatypeConverter.parseHexBinary("%08x".format(inputLength % GZIP_LENGTH_MOD)).reverse)) >> Pull.done
+  }
 }
